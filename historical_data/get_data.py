@@ -1,7 +1,7 @@
 from binance.client import Client
 import numpy as np
 
-intervals = {240:'4h', 60:'1h', 15:'15m', 5:'5m'}
+intervals = {240:'4h', 60:'1h', 15:'15m', 5:'5m', 1: '1m'}
 start = '17 Aug, 2017'
 trading_pair = 'BTCUSDT'
 

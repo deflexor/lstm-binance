@@ -1,10 +1,13 @@
 import numpy as np
+import pandas as pd
 import plotly.offline as py
+import plotly.express as px
 import plotly.graph_objs as go
+import keras
 from keras.layers import LSTM, Dense, Dropout, TimeDistributed
 from keras.models import Sequential
 from sklearn.preprocessing import StandardScaler
-from sklearn.externals import joblib
+import joblib
 from keras.utils import to_categorical
 import json
 import os
@@ -90,15 +93,22 @@ def shape_data(X, y, timesteps=10):
         reshaped.append(X[i - timesteps:i])
     
     # account for data lost in reshaping
+    # X(0, 10)
+    # X(1, 11)
+    # X(2, 12)
+    # X(3, 13)
+    # X(4, 14)
+    # X(5, 15), ... X(5000, 5010)
     X = np.array(reshaped)
     y = y[timesteps - 1:]
 
     return X, y
 
-def build_model():
+def build_model(shp):
     # first layer
     model = Sequential()
-    model.add(LSTM(32, input_shape=(X.shape[1], X.shape[2]), return_sequences=True))
+    # print(shp) => (10, 5)
+    model.add(LSTM(32, input_shape=shp, return_sequences=True))
     model.add(Dropout(0.2))
 
     # second layer
@@ -116,7 +126,35 @@ def build_model():
 
     return model
 
-if __name__ == '__main__':
+def graph1(x_test, y_test, predict):
+    df_test= pd.DataFrame(y_test, dtype=float)
+    fig = px.bar(df_test, mode='stack', labels={'index':'x_test', 'value':'y_test', 'variable':'series'})
+    fig.show()
+
+def graph(x_test, y_test, predict):
+    # graph the labels
+    y = go.Scatter(y=y_test, name='Y')
+    p1 = go.Scatter(y=predict[:,0], name='Predict1')
+    p2 = go.Scatter(y=predict[:,1], name='Predict1')
+    #trace2 = go.Scatter(y=self.savgol_deriv, name='Derivative', yaxis='y2')
+
+    data = [y, p1, p2]
+
+    layout = go.Layout(
+        title='Labels',
+        yaxis=dict(
+            title='BTC value'
+        ),
+        # yaxis2=dict(
+        #     title='Derivative of Filter',
+        #     overlaying='y',
+        #     side='right'
+        # )
+    )
+    fig = go.Figure(data=data, layout=layout)
+    py.plot(fig, filename='./docs/test.html')
+
+def train_and_save():
     with open('historical_data/hist_data.json') as f:
         data = json.load(f)
 
@@ -130,7 +168,29 @@ if __name__ == '__main__':
     # binary encode for softmax function
     y_train, y_test = to_categorical(y_train, 2), to_categorical(y_test, 2)
 
+    # print(X) => [[10x5], [[NUMx5]x10], ...]
     # build and train model
-    model = build_model()
+    model = build_model((X.shape[1], X.shape[2]))
+    # epochs=10
     model.fit(X_train, y_train, epochs=10, batch_size=8, shuffle=True, validation_data=(X_test, y_test))
-    model.save('models/lstm_model.h5')
+    model.save('models/lstm_model.keras')
+
+
+def load_and_run():
+    with open('historical_data/hist_data.json') as f:
+        data = json.load(f)
+
+    # load and reshape data
+    X, y = extract_data(np.array(data['close']))
+    X, y = shape_data(X, y, timesteps=10)
+
+    # ensure equal number of labels, shuffle, and split
+    X_train, X_test, y_train, y_test = adjust_data(X, y)
+
+    model = keras.saving.load_model('models/lstm_model.keras')
+    # RUN model
+    prediction = model(X_test)
+    graph(X_test, y_test, prediction)
+
+if __name__ == '__main__':
+    load_and_run()
