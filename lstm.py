@@ -176,7 +176,7 @@ def train_and_save():
     model.save('models/lstm_model.keras')
 
 
-def load_and_run():
+def load_and_plot():
     with open('historical_data/hist_data.json') as f:
         data = json.load(f)
 
@@ -189,8 +189,9 @@ def load_and_run():
 
     model = keras.saving.load_model('models/lstm_model.keras')
     # RUN model
+    print(X_test)
     prediction = model(X_test)
     graph(X_test, y_test, prediction)
 
 if __name__ == '__main__':
-    load_and_run()
+    load_and_plot()

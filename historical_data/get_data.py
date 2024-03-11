@@ -1,12 +1,12 @@
-from binance.client import Client
+from binance import Client
 import numpy as np
 
 intervals = {240:'4h', 60:'1h', 15:'15m', 5:'5m', 1: '1m'}
-start = '17 Aug, 2017'
-trading_pair = 'BTCUSDT'
+start = '17 Feb, 2024'
+trading_pair = 'TRXUSDT'
 
 # load key and secret and connect to API
-keys = open('../keys.txt').readline()
+keys = open('../keys.txt').readline().split(' ')
 print('Connecting to Client...')
 api = Client(keys[0], keys[1])
 
@@ -24,4 +24,5 @@ print("\nDatapoints:  {0}".format(hist.shape[0]))
 print("Memory:      {0:.2f} Mb\n".format((hist.nbytes) / 1000000))
 
 # save to file as numpy object
+print(hist)
 np.save("hist_data", hist)
