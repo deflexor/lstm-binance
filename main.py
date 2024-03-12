@@ -1,4 +1,5 @@
 import asyncio
+from collections import deque
 import json
 from binance import AsyncClient, DepthCacheManager, BinanceSocketManager
 from binance.helpers import round_step_size
@@ -16,8 +17,8 @@ trading_pair = 'TRXUSDT'
 # no newline in file!
 keys = open('./keys.txt').readline().split(' ')
 
-def on_data(data):
-  X, y = extract_data(np.array(data['close']))
+def run_prediction(data):
+  X, y = extract_data(np.array(data['c']))
   X, y = shape_data(X, y, timesteps=10)
 
   model = keras.saving.load_model('models/lstm_model.keras')
@@ -30,7 +31,7 @@ def create_order(client, msg, side = SIDE_BUY):
   tick_size = tick_sizes[trading_pair]
   rounded_amount = round_step_size(amount, tick_size)
   print("creating order:")
-  print(f"amt: {}", rounded_amount)
+  print(f"ramt: {rounded_amount}, side:{side}, price:{msg.c}")
   order = client.create_margin_order(
     symbol=trading_pair,
     side=side,
@@ -54,29 +55,44 @@ async def trade_listener(bsm, client):
       res = await stream.recv()
       print(f'margin_socket recv {res}')
 
+async def queue_listener(queue):
+  tencandles = deque(None, 10)
+  while True:
+    # Get a "work item" out of the queue.
+    item = await queue.get()
+    print(f'got from queue: {item}')
+    if item['t'] > tencandles[0]['t'] or tencandles.count == 0:
+      tencandles.appendleft(item)
+      if tencandles.count == tencandles.maxlen:
+        result = run_prediction(tencandles)
+        # TODO: put buy order or sell order depending on result
+        print(f"prediction result: {result}")
+
+    # Notify the queue that the "work item" has been processed.
+    queue.task_done()
+
+
+
 async def main():
   client = await AsyncClient.create(keys[0], keys[1])
   #print(json.dumps(await client.get_symbol_ticker(symbol=trading_pair), indent=2))
   queue = asyncio.Queue()
   bsm = BinanceSocketManager(client)
-
-
-  orders = await client.get_open_margin_orders(symbol=trading_pair)
-  aorders = await client.get_all_margin_orders(symbol=trading_pair)
-  print("my orders:")
-  print(orders)
-  print("my all orders:")
-  print(aorders)
+  # orders = await client.get_open_margin_orders(symbol=trading_pair)
+  # aorders = await client.get_all_margin_orders(symbol=trading_pair)
+  # print("my orders:")
+  # print(orders)
+  # print("my all orders:")
+  # print(aorders)
 
   async for kline in await client.get_historical_klines_generator(trading_pair, AsyncClient.KLINE_INTERVAL_1MINUTE, "9 minutes ago UTC"):
-        print(kline)
-
+    queue.put(kline)
 
   await asyncio.gather(
      kline_listener(bsm, client),
      trade_listener(bsm, client),
+     queue_listener(queue, client),
   )
-  #task = asyncio.create_task(some_coro(param=i))
 
   await client.close_connection()
 
