@@ -13,13 +13,16 @@ tick_sizes = {
    'DOGEUSDT': 0.0001,
 }
 
+TIMESTEPS = 10
+
 trading_pair = 'TRXUSDT'
 # no newline in file!
 keys = open('./keys.txt').readline().split(' ')
 
 def run_prediction(data):
-  X, y = extract_data(np.array(data['c']))
-  X, y = shape_data(X, y, timesteps=10)
+  c = list(map(lambda d: d['c'], data))
+  X, y = extract_data(np.array(c))
+  X, y = shape_data(X, y, timesteps=TIMESTEPS)
 
   model = keras.saving.load_model('models/lstm_model.keras')
   # RUN model
@@ -42,34 +45,35 @@ def create_order(client, msg, side = SIDE_BUY):
   print("create order:")
   print(order)
 
-async def kline_listener(bsm, client):
+async def kline_listener(bsm, ipcqueue, client):
   async with bsm.kline_socket(symbol=trading_pair, interval=AsyncClient.KLINE_INTERVAL_1MINUTE) as stream:
-    #while True:
-    for _ in range(5):
+    while True:
       res = await stream.recv()
       print(f'kline_socket recv {res}')
+      await ipcqueue.put(res['k'])
 
-async def trade_listener(bsm, client):
+async def trade_listener(bsm, ipcqueue, client):
   async with bsm.margin_socket() as stream:
     while True:
       res = await stream.recv()
       print(f'margin_socket recv {res}')
 
-async def queue_listener(queue):
-  tencandles = deque(None, 10)
+async def queue_listener(ipcqueue, client):
+  tencandles = deque([], 25)
   while True:
     # Get a "work item" out of the queue.
-    item = await queue.get()
-    print(f'got from queue: {item}')
-    if item['t'] > tencandles[0]['t'] or tencandles.count == 0:
-      tencandles.appendleft(item)
-      if tencandles.count == tencandles.maxlen:
+    item = await ipcqueue.get()
+    #print(f'got from queue: {item} {len(tencandles)}')
+    if len(tencandles) == 0 or item['t'] > tencandles[len(tencandles)-1]['t']:
+      tencandles.append(item)
+      if len(tencandles) == tencandles.maxlen:
+        print(f"prediction run!")
         result = run_prediction(tencandles)
         # TODO: put buy order or sell order depending on result
         print(f"prediction result: {result}")
 
     # Notify the queue that the "work item" has been processed.
-    queue.task_done()
+    ipcqueue.task_done()
 
 
 
@@ -85,12 +89,12 @@ async def main():
   # print("my all orders:")
   # print(aorders)
 
-  async for kline in await client.get_historical_klines_generator(trading_pair, AsyncClient.KLINE_INTERVAL_1MINUTE, "9 minutes ago UTC"):
-    queue.put(kline)
+  async for kline in await client.get_historical_klines_generator(trading_pair, AsyncClient.KLINE_INTERVAL_1MINUTE, "25 minutes ago UTC"):
+    await queue.put({ "t": kline[0], "o": kline[1], "h": kline[2], "l": kline[3], "c": kline[4], "v": kline[5], "T": kline[6]})
 
   await asyncio.gather(
-     kline_listener(bsm, client),
-     trade_listener(bsm, client),
+     kline_listener(bsm, queue, client),
+     trade_listener(bsm, queue, client),
      queue_listener(queue, client),
   )
 
