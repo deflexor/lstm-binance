@@ -134,7 +134,7 @@ def graph1(x_test, y_test, predict):
 def graph(x_test, y_test, predict):
     # graph the labels
     y = go.Scatter(y=y_test, name='Y')
-    p1 = go.Scatter(y=predict[:,0], name='Predict1')
+    p1 = go.Scatter(y=predict[:,0], name='Predict0')
     p2 = go.Scatter(y=predict[:,1], name='Predict1')
     #trace2 = go.Scatter(y=self.savgol_deriv, name='Derivative', yaxis='y2')
 
@@ -189,8 +189,9 @@ def load_and_plot():
 
     model = keras.saving.load_model('models/lstm_model.keras')
     # RUN model
-    print(X_test)
+    print(f' XTEST: {X_test}')
     prediction = model(X_test)
+    print(f'PRED: {prediction}')
     graph(X_test, y_test, prediction)
 
 if __name__ == '__main__':

@@ -9,6 +9,7 @@ class Ema(object):
 
     def calc_ema(self, data):
         # initialize seed and first value
+        # print(f'-----> {sum(data[:self.period])} / {self.period}')
         seed = sum(data[:self.period]) / self.period
         ema = [(data[0] * self.k) + (seed * (1 - self.k))]
 
