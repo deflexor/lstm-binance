@@ -19,6 +19,8 @@ trading_pair = 'TRXUSDT'
 # no newline in file!
 keys = open('./keys.txt').readline().split(' ')
 
+ORDER = None
+
 def run_prediction(data):
   c = list(map(lambda d: float(d['c']), data))
   X, y = extract_data(np.array(c))
@@ -45,6 +47,50 @@ def create_order(client, msg, side = SIDE_BUY):
   print("create order:")
   print(order)
 
+def manage_order(client, predict, msg):
+  print(f"prediction result0: {predict[:,0]}")
+  print(f"prediction result1: {predict[:,1]}")
+  global ORDER
+  if ORDER is not None:
+    close_test_order(client, msg)
+  else:
+    if prediction > 0.5:
+      create_test_order(client, msg, SIDE_BUY)
+    else:
+      create_test_order(client, msg, SIDE_SELL)
+
+def create_test_order(client, msg, side = SIDE_BUY):
+  global ORDER
+  sl_k = 0.005
+  sl = msg.c + msg.c * sl_k if side == SIDE_SELL else msg.c - msg.c * sl_k
+  ORDER = {
+    "side": SIDE_BUY,
+    "price": msg.c,
+    "sl": sl,
+    "status": ORDER_STATUS_FILLED,
+  }
+
+def close_test_order(client, msg):
+  global ORDER
+  global TOT_PROFIT
+  profit = ORDER['price'] - msg.c if ORDER['side'] == SIDE_SELL else msg.c - ORDER['price']
+  slprofit = ORDER['sl'] - msg.c if ORDER['side'] == SIDE_SELL else msg.c - ORDER['sl']
+  sl_k = 0.005
+  if profit > ORDER['price'] * 0.015: sl_k = 0.01
+  if profit > ORDER['price'] * 0.05: sl_k = 0.025
+  if profit > ORDER['price'] * 0.1: sl_k = 0.002
+  sl = msg.c + msg.c * sl_k if ORDER["side"] == SIDE_SELL else msg.c - msg.c * sl_k
+  print(f"profit: {profit}, sl: {sl}, slprofit: {slprofit}")
+  if slprofit < 0:
+    # close order!
+    TOT_PROFIT.push(profit)
+    ORDER = None
+  else:
+    # move sl
+    ORDER["sl"] = sl
+
+
+
 async def kline_listener(bsm, ipcqueue, client):
   async with bsm.kline_socket(symbol=trading_pair, interval=AsyncClient.KLINE_INTERVAL_1MINUTE) as stream:
     while True:
@@ -56,7 +102,7 @@ async def trade_listener(bsm, ipcqueue, client):
   async with bsm.margin_socket() as stream:
     while True:
       res = await stream.recv()
-      print(f'margin_socket recv {res}')
+      print(f'trade_listener margin_socket recv {res}')
 
 async def queue_listener(ipcqueue, client):
   tencandles = deque([], 60)
@@ -70,8 +116,7 @@ async def queue_listener(ipcqueue, client):
         print(f"prediction run!")
         predict = run_prediction(tencandles)
         # TODO: put buy order or sell order depending on result
-        print(f"prediction result0: {predict[:,0]}")
-        print(f"prediction result1: {predict[:,1]}")
+        manage_order(client, predict[:,0], tencandles[len(tencandles)-1])
 
     # Notify the queue that the "work item" has been processed.
     ipcqueue.task_done()

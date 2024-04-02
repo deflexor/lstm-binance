@@ -134,11 +134,12 @@ def graph1(x_test, y_test, predict):
 def graph(x_test, y_test, predict):
     # graph the labels
     y = go.Scatter(y=y_test, name='Y')
-    p1 = go.Scatter(y=predict[:,0], name='Predict0')
-    p2 = go.Scatter(y=predict[:,1], name='Predict1')
+    p1 = go.Scatter(y=x_test, name='Predict0')
+    #p2 = go.Scatter(y=predict[:,1], name='Predict1')
     #trace2 = go.Scatter(y=self.savgol_deriv, name='Derivative', yaxis='y2')
+    print(x_test)
 
-    data = [y, p1, p2]
+    data = [y, p1]
 
     layout = go.Layout(
         title='Labels',
@@ -155,11 +156,12 @@ def graph(x_test, y_test, predict):
     py.plot(fig, filename='./docs/test.html')
 
 def train_and_save():
-    with open('historical_data/hist_data.json') as f:
-        data = json.load(f)
+    data = np.load('historical_data/hist_data.npy')
+    #with open('historical_data/hist_data.npy') as f:
+    #    data = json.load(f)
 
-    # load and reshape data
-    X, y = extract_data(np.array(data['close']))
+    # load and reshape data np.array(data['close'])
+    X, y = extract_data(data)
     X, y = shape_data(X, y, timesteps=10)
 
     # ensure equal number of labels, shuffle, and split
@@ -172,16 +174,18 @@ def train_and_save():
     # build and train model
     model = build_model((X.shape[1], X.shape[2]))
     # epochs=10
-    model.fit(X_train, y_train, epochs=10, batch_size=8, shuffle=True, validation_data=(X_test, y_test))
+    #model.fit(X_train, y_train, epochs=10, batch_size=8, shuffle=True, validation_data=(X_test, y_test))
+    model.fit(X_train, y_train, epochs=10, shuffle=True, validation_data=(X_test, y_test))
     model.save('models/lstm_model.keras')
 
 
 def load_and_plot():
-    with open('historical_data/hist_data.json') as f:
-        data = json.load(f)
+    data = np.load('historical_data/hist_data.npy')
+    #with open('historical_data/hist_data.json') as f:
+    #    data = json.load(f)
 
     # load and reshape data
-    X, y = extract_data(np.array(data['close']))
+    X, y = extract_data(data)
     X, y = shape_data(X, y, timesteps=10)
 
     # ensure equal number of labels, shuffle, and split
@@ -195,4 +199,5 @@ def load_and_plot():
     graph(X_test, y_test, prediction)
 
 if __name__ == '__main__':
+    #train_and_save()
     load_and_plot()
